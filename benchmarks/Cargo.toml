@@ -1,0 +1,15 @@
+[package]
+name = "kinetix-benchmarks"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "kinetix-benchmarks"
+path = "src/main.rs"
+
+[dependencies]
+kinetix-core = { path = "../kinetix-core" }
+kinetix-spatial = { path = "../kinetix-spatial" }
+kinetix-urdf = { path = "../kinetix-urdf" }
+nalgebra = { version = "0.34", default-features = false, features = ["macros"] }

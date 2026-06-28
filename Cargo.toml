@@ -1,0 +1,11 @@
+[workspace]
+resolver = "3"
+members = [
+    "kinetix",
+    "kinetix-autodiff",
+    "kinetix-core",
+    "benchmarks",
+    "kinetix-py",
+    "kinetix-spatial",
+    "kinetix-urdf",
+]

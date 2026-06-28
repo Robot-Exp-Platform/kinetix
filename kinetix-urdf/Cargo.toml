@@ -1,0 +1,10 @@
+[package]
+name = "kinetix-urdf"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+kinetix-core = { path = "../kinetix-core" }
+kinetix-spatial = { path = "../kinetix-spatial" }
+nalgebra = { version = "0.34", default-features = false, features = ["macros"] }
+urdf-rs = "0.9"

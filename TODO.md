@@ -1,0 +1,790 @@
+# kinetix TODO
+
+- [ ] 0. 从零开始的项目目标
+  - [ ] 将 kinetix 重新定义为一个从零设计的 Rust 机器人运动学与动力学库。
+    - [ ] 当前已有代码、crate 切分、API 形态和临时设计均不作为约束。
+    - [ ] Pinocchio 只作为结构思想、算法完整性和验证基准的参考。
+    - [ ] Rust 版本应主动利用类型系统、const generics、feature gating 和代码生成能力。
+  - [ ] 明确首要设计目标。
+    - [ ] 编译期坐标系安全：空间运动量、空间力、刚体变换、惯量和 Jacobian 应尽可能携带类型级坐标系信息。
+    - [ ] 实时路径零分配：控制循环中运行的算法不得触发 heap allocation。
+    - [ ] `no_std` 核心：空间代数、模型描述、缓存和核心算法应能在无标准库环境中使用。
+    - [ ] Model/Data 分离：机器人固有信息与单次计算缓存严格分离。
+    - [ ] 可验证完整性：每个核心算法都应能与 Pinocchio 或解析解对齐。
+  - [ ] 明确非目标。
+    - [ ] 不以做一个仿真器为首要目标。
+    - [ ] 不在核心算法中内置可视化、文件 IO、网络、日志系统。
+    - [ ] 不为了快速实现而牺牲坐标系安全和实时约束。
+    - [ ] 不把 parser、codegen、collision 等边缘能力混入核心 crate。
+
+- [ ] 1. 预期 workspace 结构
+  - [ ] 设计根 workspace。
+    - [ ] 根 `Cargo.toml` 只负责 workspace 成员、统一 lint、profile 和 feature policy。
+    - [ ] 根目录提供项目级文档、基准、测试 fixture 和参考数据。
+  - [ ] 设计 facade crate。
+    - [ ] 对最终用户暴露稳定入口。
+    - [ ] 默认只打开实时核心能力。
+    - [ ] 通过 feature 暴露 parser、codegen、geometry、collision、autodiff 等扩展能力。
+    - [ ] 提供 `prelude`，但不隐藏底层模块边界。
+  - [ ] 设计核心基础 crate。
+    - [ ] 提供标量 trait、索引类型、坐标系 marker、错误类型和容量抽象。
+    - [ ] 不依赖 `std`。
+    - [ ] 不依赖 parser、geometry、collision、codegen。
+  - [ ] 设计空间代数 crate。
+    - [ ] 提供 SE3、Motion、Force、Inertia、SO3、Lie group 辅助能力。
+    - [ ] 所有核心空间量都应表达坐标系安全。
+    - [ ] 所有热路径操作应能静态分派。
+  - [ ] 设计关节与配置空间 crate。
+    - [ ] 提供关节模型、关节运行时状态、配置空间操作和 joint-specific 算法入口。
+    - [ ] 支持单自由度、多自由度、floating-base、mimic 和 composite 关节。
+  - [ ] 设计模型 crate。
+    - [ ] 提供机器人树、操作帧、惯量附着、限制、拓扑查询和模型构建能力。
+    - [ ] 不直接承担算法缓存。
+  - [ ] 设计数据缓存 crate。
+    - [ ] 提供所有核心算法需要的预分配缓存。
+    - [ ] 支持静态容量、动态容量和用户自带 buffer。
+  - [ ] 设计算法 crate。
+    - [ ] 提供 FK、Jacobian、RNEA、CRBA、ABA、CoM、centroidal、derivatives、constraints。
+    - [ ] 所有实时算法都必须接受外部提供的缓存。
+  - [ ] 设计 parser crate。
+    - [ ] 负责 URDF、SRDF、SDF、MJCF 等格式导入。
+    - [ ] 只在 `std` 或 `alloc` feature 下工作。
+  - [ ] 设计 codegen crate。
+    - [ ] 从解析后的机器人描述生成静态类型、静态容量和强类型坐标系 API。
+    - [ ] 支持为固定机器人生成零分配专用入口。
+  - [ ] 设计 geometry crate。
+    - [ ] 管理 visual/collision geometry 的模型与缓存。
+    - [ ] 与动力学模型分离，但可由动力学结果更新几何位姿。
+  - [ ] 设计 collision crate。
+    - [ ] 通过后端 trait 适配碰撞库。
+    - [ ] 不让碰撞依赖污染动力学核心。
+  - [ ] 设计 validation crate 或测试工具。
+    - [ ] 管理 Pinocchio 黄金数据。
+    - [ ] 管理解析解 fixture。
+    - [ ] 管理 no allocation 和 no_std 检查。
+
+- [ ] 2. Feature 与编译边界
+  - [ ] 设计默认 feature。
+    - [ ] 默认 feature 只包含可用于实时控制的核心能力。
+    - [ ] 默认 feature 不打开 parser、文件 IO、碰撞、自动微分或代码生成。
+  - [ ] 设计 `std` feature。
+    - [ ] 允许使用文件、路径、字符串诊断、标准错误类型和测试辅助工具。
+    - [ ] 明确 `std` 能力不能被核心算法隐式依赖。
+  - [ ] 设计 `alloc` feature。
+    - [ ] 允许构建 heap-backed 模型和缓存。
+    - [ ] 明确算法调用阶段仍不能分配。
+  - [ ] 设计 `static-model` feature。
+    - [ ] 启用 const generic 容量和生成式模型入口。
+    - [ ] 用于硬实时和嵌入式部署。
+  - [ ] 设计 `dynamic-model` feature。
+    - [ ] 启用运行时尺寸模型。
+    - [ ] 用于研究、工具、parser 输出和快速实验。
+  - [ ] 设计 `parser` feature。
+    - [ ] 启用 URDF/SRDF/SDF/MJCF 导入能力。
+    - [ ] parser 允许分配，但产物应能转换为实时模型。
+  - [ ] 设计 `codegen` feature。
+    - [ ] 启用从机器人描述生成 Rust 代码。
+    - [ ] 生成代码应可在核心 feature 下编译。
+  - [ ] 设计 `geometry` 与 `collision` feature。
+    - [ ] geometry 只负责几何模型和几何缓存。
+    - [ ] collision 只负责碰撞查询和距离查询。
+  - [ ] 设计 `autodiff` feature。
+    - [ ] 支持可微标量和导数算法。
+    - [ ] 不影响普通 `f32/f64` 热路径。
+  - [ ] 为每组 feature 增加编译矩阵。
+    - [ ] `no-default-features`。
+    - [ ] `default`。
+    - [ ] `std`。
+    - [ ] `alloc`。
+    - [ ] `parser + codegen`。
+    - [ ] `geometry + collision`。
+    - [ ] `autodiff`。
+
+- [ ] 3. 坐标系安全能力
+  - [ ] 设计类型级 frame marker。
+    - [ ] 用户可以声明世界坐标系、关节坐标系、连杆坐标系、传感器坐标系和操作坐标系。
+    - [ ] codegen 可以为机器人中的每个 frame 自动生成唯一 marker。
+    - [ ] 动态模型可以使用运行时 frame 标识作为降级路径。
+  - [ ] 区分参考坐标系和表达坐标系。
+    - [ ] Motion 的物理参考点或参考刚体应可表达。
+    - [ ] Motion 的数值表达坐标系应可表达。
+    - [ ] Force 的施加参考与表达坐标系应可表达。
+    - [ ] Transform 的方向应通过类型参数表达。
+  - [ ] 实现编译期禁止错误加法。
+    - [ ] 不同表达坐标系的 Motion 不能直接相加。
+    - [ ] 不同参考语义的 Motion 不能直接相加。
+    - [ ] 不同表达坐标系的 Force 不能直接相加。
+    - [ ] 用户必须显式变换后才能相加。
+  - [ ] 实现编译期禁止错误乘法。
+    - [ ] `Transform<A, B> * Transform<B, C>` 合法。
+    - [ ] `Transform<A, B> * Transform<C, D>` 非法。
+    - [ ] `Transform<A, B>` 只能作用于表达在 `B` 中的空间量。
+  - [ ] 实现编译期禁止错误对偶变换。
+    - [ ] Motion 使用 action。
+    - [ ] Force 使用 dual action。
+    - [ ] Inertia 变换必须保持其输入 Motion 与输出 Force 的坐标系关系一致。
+  - [ ] 提供清晰错误示例。
+    - [ ] 错误 frame 的 Motion 相加示例。
+    - [ ] 错误方向的 Transform 组合示例。
+    - [ ] 错误 Force 变换示例。
+    - [ ] 错误 Jacobian 表达坐标系使用示例。
+
+- [ ] 4. 标量与数值后端
+  - [ ] 支持基础浮点标量。
+    - [ ] 支持 `f32`。
+    - [ ] 支持 `f64`。
+    - [ ] 所有核心算法不得写死 `f64`。
+  - [ ] 支持实时友好的数学函数。
+    - [ ] 提供 `sin_cos`、`sqrt`、`abs`、`epsilon` 等能力。
+    - [ ] 在 `no_std` 下明确数学函数来源。
+    - [ ] 对近似数学函数给出误差边界。
+  - [ ] 支持自动微分标量。
+    - [ ] 支持 forward-mode dual number。
+    - [ ] 评估 reverse-mode 后端。
+    - [ ] 支持 RNEA/ABA/CRBA 的可微调用路径。
+  - [ ] 支持符号或代码生成标量。
+    - [ ] 评估 CasADi 类后端适配。
+    - [ ] 评估 CppADCodeGen 类能力在 Rust 生态下的替代方案。
+  - [ ] 建立数值容差策略。
+    - [ ] 不同标量精度对应不同默认 tolerance。
+    - [ ] 黄金数据测试应允许配置容差。
+    - [ ] 文档说明浮点误差和坐标系变换误差来源。
+
+- [ ] 5. 空间代数功能
+  - [ ] 实现 3D 基础量。
+    - [ ] 三维向量支持加减、点乘、叉乘、缩放、范数。
+    - [ ] 三维旋转支持组合、逆、作用于向量。
+    - [ ] 三维平移支持组合到刚体变换。
+  - [ ] 实现 SO3。
+    - [ ] 支持 rotation matrix。
+    - [ ] 支持 quaternion。
+    - [ ] 支持 exponential map。
+    - [ ] 支持 logarithm map。
+    - [ ] 支持小角度稳定实现。
+  - [ ] 实现 SE3。
+    - [ ] 支持刚体变换组合。
+    - [ ] 支持刚体变换求逆。
+    - [ ] 支持点、向量、Motion、Force、Inertia 的坐标变换。
+    - [ ] 支持 homogeneous matrix 互转。
+    - [ ] 支持 action matrix 和 dual action matrix。
+    - [ ] 支持 SE3 exponential/logarithm。
+  - [ ] 实现 Motion。
+    - [ ] 表达空间速度。
+    - [ ] 表达空间加速度。
+    - [ ] 支持 linear/angular 访问。
+    - [ ] 支持空间运动叉乘。
+    - [ ] 支持对 Force 的对偶叉乘。
+    - [ ] 支持与 Transform 的类型安全交互。
+  - [ ] 实现 Force。
+    - [ ] 表达空间力和力矩。
+    - [ ] 支持 linear/angular 访问。
+    - [ ] 支持与 Motion 的功率 pairing。
+    - [ ] 支持对偶坐标变换。
+  - [ ] 实现 Inertia。
+    - [ ] 支持从质量、质心、转动惯量构造。
+    - [ ] 支持把 Motion 映射为 Force。
+    - [ ] 支持平行轴定理。
+    - [ ] 支持坐标变换。
+    - [ ] 支持刚体惯量合法性检查。
+  - [ ] 验证空间代数。
+    - [ ] SE3 群性质。
+    - [ ] SO3 正交性。
+    - [ ] Motion/Force pairing 在坐标变换下保持不变。
+    - [ ] Inertia action 与 Pinocchio 对齐。
+    - [ ] 6D 排列约定与文档完全一致。
+
+- [ ] 6. 关节与配置空间功能
+  - [ ] 定义关节抽象。
+    - [ ] 每个关节能报告自身配置维度和速度维度。
+    - [ ] 每个关节能从局部配置计算关节位姿。
+    - [ ] 每个关节能从局部速度计算关节运动子空间贡献。
+    - [ ] 每个关节能提供 ABA 所需的局部消元能力。
+  - [ ] 支持基础关节。
+    - [ ] fixed joint。
+    - [ ] revolute joint。
+    - [ ] revolute unbounded joint。
+    - [ ] prismatic joint。
+    - [ ] helical joint。
+  - [ ] 支持多自由度关节。
+    - [ ] spherical quaternion joint。
+    - [ ] spherical ZYX joint。
+    - [ ] planar joint。
+    - [ ] translation 3D joint。
+    - [ ] universal joint。
+  - [ ] 支持 floating-base。
+    - [ ] free-flyer joint。
+    - [ ] floating-base 的 `nq` 与 `nv` 不相等。
+    - [ ] floating-base 的 integrate/difference 必须处理 quaternion。
+  - [ ] 支持组合与耦合。
+    - [ ] composite joint。
+    - [ ] mimic joint。
+    - [ ] mimic joint 支持缩放和偏置。
+    - [ ] 明确哪些算法首版支持 mimic，哪些算法暂不支持。
+  - [ ] 实现配置空间操作。
+    - [ ] neutral configuration。
+    - [ ] random configuration。
+    - [ ] integrate。
+    - [ ] difference。
+    - [ ] interpolate。
+    - [ ] normalize。
+    - [ ] distance。
+    - [ ] configuration limit check。
+  - [ ] 验证配置空间。
+    - [ ] `difference(q, integrate(q, v))` 与 `v` 一致。
+    - [ ] quaternion 始终保持单位长度。
+    - [ ] revolute unbounded 不被错误 wrap。
+    - [ ] free-flyer 与 Pinocchio 对齐。
+
+- [ ] 7. 机器人模型能力
+  - [ ] 支持构建机器人运动树。
+    - [ ] 支持 universe/root 约定。
+    - [ ] 支持向已有父节点添加子关节。
+    - [ ] 支持分支树，不只支持串联链。
+    - [ ] 支持 floating-base 模型。
+    - [ ] 支持固定关节和虚拟关节。
+  - [ ] 支持刚体惯量附着。
+    - [ ] 每个运动节点可关联刚体惯量。
+    - [ ] 固定结构可以被合并或表示为 frame。
+    - [ ] 模型构建时应能检查惯量合法性。
+  - [ ] 支持操作帧。
+    - [ ] 支持末端执行器 frame。
+    - [ ] 支持传感器 frame。
+    - [ ] 支持碰撞几何 frame。
+    - [ ] 支持视觉几何 frame。
+    - [ ] 支持按名称查找。
+    - [ ] 支持按类型查找。
+  - [ ] 支持拓扑查询。
+    - [ ] 查询某节点父节点。
+    - [ ] 查询某节点子节点。
+    - [ ] 查询从 root 到某节点的支撑路径。
+    - [ ] 查询某节点的子树。
+    - [ ] 查询两个节点的公共祖先。
+    - [ ] 查询关节在配置向量和速度向量中的范围。
+  - [ ] 支持模型限制。
+    - [ ] 位置限制。
+    - [ ] 速度限制。
+    - [ ] 力矩限制。
+    - [ ] 阻尼。
+    - [ ] 摩擦。
+    - [ ] 电机转子惯量。
+    - [ ] armature。
+  - [ ] 支持模型构建流程。
+    - [ ] builder API 适合手写模型。
+    - [ ] parser conversion API 适合 URDF/SDF/MJCF。
+    - [ ] codegen API 适合静态机器人。
+    - [ ] 构建完成后执行拓扑派生和一致性检查。
+  - [ ] 支持模型验证。
+    - [ ] 检查树结构无环。
+    - [ ] 检查 parent 顺序合法。
+    - [ ] 检查维度一致。
+    - [ ] 检查关节类型与配置空间操作一致。
+    - [ ] 检查 frame 归属合法。
+    - [ ] 检查限制维度合法。
+
+- [ ] 8. 计算缓存能力
+  - [ ] 支持独立缓存对象。
+    - [ ] 用户必须显式创建缓存。
+    - [ ] 核心算法不得在内部临时创建大缓存。
+    - [ ] 缓存与模型必须能做一致性检查。
+  - [ ] 支持运动学缓存。
+    - [ ] 保存世界位姿计算结果。
+    - [ ] 保存局部位姿计算结果。
+    - [ ] 保存空间速度计算结果。
+    - [ ] 保存空间加速度计算结果。
+    - [ ] 保存 frame 位姿、速度和加速度查询所需结果。
+  - [ ] 支持动力学缓存。
+    - [ ] 保存逆动力学输出。
+    - [ ] 保存前向动力学输出。
+    - [ ] 保存质量矩阵。
+    - [ ] 保存非线性项。
+    - [ ] 保存重力项。
+    - [ ] 保存复合刚体惯量中间结果。
+    - [ ] 保存 articulated body 中间结果。
+  - [ ] 支持 Jacobian 缓存。
+    - [ ] 保存 joint Jacobian。
+    - [ ] 保存 frame Jacobian。
+    - [ ] 保存 Jacobian time variation。
+  - [ ] 支持质心和 centroidal 缓存。
+    - [ ] 保存总质量和子树质量。
+    - [ ] 保存质心位置、速度、加速度。
+    - [ ] 保存 centroidal momentum。
+    - [ ] 保存 centroidal momentum matrix。
+  - [ ] 支持导数缓存。
+    - [ ] 保存 RNEA derivatives。
+    - [ ] 保存 ABA derivatives。
+    - [ ] 保存 kinematics derivatives。
+    - [ ] 保存 frame derivatives。
+  - [ ] 支持多种内存模式。
+    - [ ] 静态容量缓存。
+    - [ ] heap-backed 缓存。
+    - [ ] 用户自带 buffer 缓存。
+    - [ ] 只读模型共享 + 每线程缓存独占。
+
+- [ ] 9. 运动学算法
+  - [ ] 实现正运动学。
+    - [ ] 只计算位姿。
+    - [ ] 同时计算位姿和速度。
+    - [ ] 同时计算位姿、速度和加速度。
+    - [ ] 支持所有目标关节类型。
+    - [ ] 支持分支树。
+    - [ ] 支持 floating-base。
+  - [ ] 实现 frame 查询。
+    - [ ] 查询任意 frame 的世界位姿。
+    - [ ] 查询任意 frame 的局部位姿。
+    - [ ] 查询任意 frame 的速度。
+    - [ ] 查询任意 frame 的加速度。
+    - [ ] 查询 classic acceleration。
+  - [ ] 实现 frame 更新。
+    - [ ] 根据当前 joint 结果更新所有 frame。
+    - [ ] 支持只更新指定 frame。
+    - [ ] 明确更新前置条件。
+  - [ ] 支持表达坐标系选项。
+    - [ ] WORLD。
+    - [ ] LOCAL。
+    - [ ] LOCAL_WORLD_ALIGNED。
+    - [ ] 类型安全模式下尽量用类型表达。
+  - [ ] 验证运动学。
+    - [ ] 串联链解析解。
+    - [ ] 分支树一致性。
+    - [ ] floating-base 与 Pinocchio 对比。
+    - [ ] frame 查询与手算变换对比。
+
+- [ ] 10. Jacobian 算法
+  - [ ] 实现 joint Jacobian。
+    - [ ] 支持计算所有 joint Jacobian。
+    - [ ] 支持查询单个 joint Jacobian。
+    - [ ] 支持不同表达坐标系。
+  - [ ] 实现 frame Jacobian。
+    - [ ] 支持任意操作 frame。
+    - [ ] 支持末端执行器。
+    - [ ] 支持传感器 frame。
+    - [ ] 支持 collision/visual frame。
+  - [ ] 实现 Jacobian time variation。
+    - [ ] 支持 `dJ`。
+    - [ ] 支持 `dJ * v`。
+    - [ ] 与 frame acceleration 查询保持一致。
+  - [ ] 实现 kinematic Hessian。
+    - [ ] 评估首版范围。
+    - [ ] 支持高级优化和微分运动学。
+  - [ ] 验证 Jacobian。
+    - [ ] 用数值差分验证。
+    - [ ] 用 Pinocchio 黄金数据验证。
+    - [ ] 验证不同表达坐标系的转换关系。
+
+- [ ] 11. 逆动力学 RNEA
+  - [ ] 实现完整 RNEA。
+    - [ ] 输入配置、速度、加速度。
+    - [ ] 输出广义力。
+    - [ ] 支持重力。
+    - [ ] 支持外力。
+    - [ ] 支持分支树。
+    - [ ] 支持 floating-base。
+    - [ ] 支持多自由度关节。
+  - [ ] 实现常用派生量。
+    - [ ] 非线性项。
+    - [ ] 广义重力。
+    - [ ] 静力矩。
+    - [ ] Coriolis 矩阵。
+  - [ ] 支持模型附加效应。
+    - [ ] armature。
+    - [ ] rotor inertia。
+    - [ ] damping。
+    - [ ] friction。
+  - [ ] 验证 RNEA。
+    - [ ] 单摆解析解。
+    - [ ] 二连杆机械臂解析解。
+    - [ ] 外力作用测试。
+    - [ ] 与 Pinocchio 对比。
+    - [ ] 与 ABA 互逆测试。
+
+- [ ] 12. 质量矩阵 CRBA
+  - [ ] 实现完整 CRBA。
+    - [ ] 输入配置。
+    - [ ] 输出质量矩阵。
+    - [ ] 支持分支树。
+    - [ ] 支持 floating-base。
+    - [ ] 支持多自由度关节。
+  - [ ] 支持不同计算约定。
+    - [ ] LOCAL convention。
+    - [ ] WORLD convention。
+    - [ ] 明确两种约定的结果和缓存差异。
+  - [ ] 提供质量矩阵工具。
+    - [ ] 对称化。
+    - [ ] 正定性检查。
+    - [ ] 矩阵-向量乘法快捷路径。
+  - [ ] 验证 CRBA。
+    - [ ] 质量矩阵对称。
+    - [ ] 质量矩阵正定或半正定。
+    - [ ] 与 RNEA 数值关系一致。
+    - [ ] 与 Pinocchio 对比。
+
+- [ ] 13. 前向动力学 ABA
+  - [ ] 实现完整 ABA。
+    - [ ] 输入配置、速度、广义力。
+    - [ ] 输出广义加速度。
+    - [ ] 支持重力。
+    - [ ] 支持外力。
+    - [ ] 支持分支树。
+    - [ ] 支持 floating-base。
+    - [ ] 支持多自由度关节。
+  - [ ] 支持不同计算约定。
+    - [ ] LOCAL convention。
+    - [ ] WORLD convention。
+    - [ ] 明确各自适用场景。
+  - [ ] 支持模型附加效应。
+    - [ ] armature。
+    - [ ] rotor inertia。
+    - [ ] damping。
+    - [ ] friction。
+  - [ ] 验证 ABA。
+    - [ ] `rnea(q, v, aba(q, v, tau)) == tau`。
+    - [ ] 与 `M^-1 * (tau - nle)` 对比。
+    - [ ] 与 Pinocchio 对比。
+    - [ ] 外力场景对比。
+
+- [ ] 14. 质心与 centroidal 动力学
+  - [ ] 实现质心计算。
+    - [ ] 总质心。
+    - [ ] 子树质心。
+    - [ ] 质心速度。
+    - [ ] 质心加速度。
+    - [ ] 总质量和子树质量。
+  - [ ] 实现 centroidal momentum。
+    - [ ] 计算系统总动量。
+    - [ ] 计算 centroidal momentum matrix。
+    - [ ] 计算 centroidal momentum matrix derivative。
+  - [ ] 实现 centroidal 复合算法。
+    - [ ] 支持 `ccrba` 等价能力。
+    - [ ] 支持 `dccrba` 等价能力。
+    - [ ] 与 CRBA/FK 共享中间结果。
+  - [ ] 验证 centroidal 算法。
+    - [ ] 动量与各刚体动量求和一致。
+    - [ ] 质心结果与质量加权求和一致。
+    - [ ] 与 Pinocchio 对比。
+
+- [ ] 15. 能量、回归器与识别
+  - [ ] 实现能量计算。
+    - [ ] 动能。
+    - [ ] 势能。
+    - [ ] 总机械能。
+    - [ ] 能量结果与 RNEA/CRBA 关系一致。
+  - [ ] 实现动力学回归器。
+    - [ ] 关节力矩回归器。
+    - [ ] 静力回归器。
+    - [ ] 动能回归器。
+    - [ ] 势能回归器。
+  - [ ] 明确惯性参数约定。
+    - [ ] 参数排列顺序文档化。
+    - [ ] 与 Pinocchio 约定对齐或明确转换方式。
+  - [ ] 验证回归器。
+    - [ ] 回归器乘参数等于动力学结果。
+    - [ ] 与 Pinocchio 对比。
+
+- [ ] 16. 导数算法
+  - [ ] 实现运动学导数。
+    - [ ] joint placement derivative。
+    - [ ] joint velocity derivative。
+    - [ ] frame velocity derivative。
+    - [ ] frame acceleration derivative。
+  - [ ] 实现 RNEA derivatives。
+    - [ ] 对配置求导。
+    - [ ] 对速度求导。
+    - [ ] 对加速度求导。
+    - [ ] 支持外力场景。
+  - [ ] 实现 ABA derivatives。
+    - [ ] 对配置求导。
+    - [ ] 对速度求导。
+    - [ ] 对力矩求导。
+    - [ ] 支持外力场景。
+  - [ ] 实现 centroidal derivatives。
+    - [ ] 动量导数。
+    - [ ] centroidal matrix 导数。
+  - [ ] 验证导数。
+    - [ ] 数值差分。
+    - [ ] 自动微分交叉验证。
+    - [ ] Pinocchio 黄金数据。
+
+- [ ] 17. 约束、接触与闭链
+  - [ ] 设计约束模型。
+    - [ ] 3D 点约束。
+    - [ ] 6D 刚性约束。
+    - [ ] 关节闭链约束。
+    - [ ] 接触约束。
+  - [ ] 设计约束缓存。
+    - [ ] 每个约束拥有独立计算缓存。
+    - [ ] 约束缓存与机器人缓存分离。
+  - [ ] 实现约束 Jacobian。
+    - [ ] 点接触 Jacobian。
+    - [ ] 刚性接触 Jacobian。
+    - [ ] 闭链约束 Jacobian。
+  - [ ] 实现约束动力学。
+    - [ ] constrained forward dynamics。
+    - [ ] contact inverse dynamics。
+    - [ ] impulse dynamics。
+    - [ ] loop-constrained ABA。
+  - [ ] 实现线性代数核心。
+    - [ ] Delassus operator。
+    - [ ] constraint Cholesky。
+    - [ ] proximal solver。
+    - [ ] PGS/ADMM 等迭代 solver 评估。
+  - [ ] 验证约束算法。
+    - [ ] 单点接触。
+    - [ ] 双足接触。
+    - [ ] 简单四杆闭链。
+    - [ ] 与 Pinocchio 对比。
+
+- [ ] 18. Parser 功能
+  - [ ] 设计中间机器人描述。
+    - [ ] parser 不直接生成算法模型。
+    - [ ] parser 先生成可诊断、可转换、可代码生成的中间描述。
+    - [ ] 中间描述应保留源文件位置信息。
+  - [ ] 实现 URDF 导入。
+    - [ ] 导入 link。
+    - [ ] 导入 inertial。
+    - [ ] 导入 joint。
+    - [ ] 导入 joint origin。
+    - [ ] 导入 joint axis。
+    - [ ] 导入 limit。
+    - [ ] 导入 dynamics damping/friction。
+    - [ ] 导入 mimic。
+    - [ ] 导入 visual/collision 几何引用。
+    - [ ] 支持 package path。
+    - [ ] 支持 root joint 选择。
+    - [ ] 正确处理 fixed joint。
+  - [ ] 实现 SRDF 导入。
+    - [ ] 导入 reference configuration。
+    - [ ] 导入 disabled collision pairs。
+    - [ ] 导入 group。
+    - [ ] 导入 end-effector。
+  - [ ] 实现 SDF 导入。
+    - [ ] 导入 model/link/joint。
+    - [ ] 导入 pose 和 inertia。
+    - [ ] 导入闭链或约束信息。
+  - [ ] 实现 MJCF 导入。
+    - [ ] 导入 body tree。
+    - [ ] 导入 joint 和 free joint。
+    - [ ] 导入 geom 和 inertial。
+    - [ ] 导入 actuator metadata。
+  - [ ] 提供 parser 诊断。
+    - [ ] 文件路径。
+    - [ ] 行列号。
+    - [ ] 当前元素路径。
+    - [ ] 可恢复 warning。
+    - [ ] 严格模式 error。
+
+- [ ] 19. Codegen 功能
+  - [ ] 从机器人描述生成静态 Rust 模型。
+    - [ ] 生成 frame marker。
+    - [ ] 生成 joint marker。
+    - [ ] 生成模型尺寸常量。
+    - [ ] 生成静态模型构造入口。
+    - [ ] 生成静态缓存构造入口。
+  - [ ] 生成类型安全 API。
+    - [ ] 每个 frame 有唯一类型。
+    - [ ] 常用 frame transform 有明确类型。
+    - [ ] 常用 Motion/Force alias 自动生成。
+    - [ ] 错误坐标系组合在用户代码中编译失败。
+  - [ ] 生成实时专用入口。
+    - [ ] 生成无分配 FK。
+    - [ ] 生成无分配 RNEA。
+    - [ ] 生成无分配 CRBA。
+    - [ ] 生成无分配 ABA。
+    - [ ] 评估是否展开机器人树循环。
+  - [ ] 生成文档。
+    - [ ] 生成模型结构说明。
+    - [ ] 生成 frame 列表。
+    - [ ] 生成 joint 列表。
+    - [ ] 生成使用示例。
+
+- [ ] 20. Geometry 与 Collision
+  - [ ] 实现几何模型。
+    - [ ] visual geometry。
+    - [ ] collision geometry。
+    - [ ] primitive shapes。
+    - [ ] mesh references。
+    - [ ] geometry 到 frame 的附着关系。
+  - [ ] 实现几何缓存。
+    - [ ] 根据当前运动学结果更新几何位姿。
+    - [ ] 支持只更新部分几何对象。
+    - [ ] 支持 visual 和 collision 分离更新。
+  - [ ] 实现碰撞后端抽象。
+    - [ ] broad phase。
+    - [ ] narrow phase。
+    - [ ] distance query。
+    - [ ] contact query。
+    - [ ] pair filtering。
+  - [ ] 支持 SRDF collision 配置。
+    - [ ] disabled collision pairs。
+    - [ ] self-collision matrix。
+  - [ ] 验证几何与碰撞。
+    - [ ] 几何位姿与 frame 位姿一致。
+    - [ ] 简单 primitive 碰撞解析验证。
+    - [ ] 与 Pinocchio/coal 结果对比。
+
+- [ ] 21. 实时与内存安全
+  - [ ] 定义实时 API 边界。
+    - [ ] 哪些函数允许分配。
+    - [ ] 哪些函数绝不允许分配。
+    - [ ] 哪些函数只允许初始化阶段调用。
+  - [ ] 实现无分配验证。
+    - [ ] 自定义 allocator 统计分配。
+    - [ ] FK 无分配测试。
+    - [ ] Jacobian 无分配测试。
+    - [ ] RNEA 无分配测试。
+    - [ ] CRBA 无分配测试。
+    - [ ] ABA 无分配测试。
+    - [ ] generated model 无分配测试。
+  - [ ] 支持硬实时数据流。
+    - [ ] 预分配输入输出 buffer。
+    - [ ] 控制循环中复用缓存。
+    - [ ] 不在热路径创建临时动态矩阵。
+    - [ ] 不在热路径做字符串格式化。
+  - [ ] 支持多线程共享。
+    - [ ] 模型可共享。
+    - [ ] 缓存不可共享或需显式同步。
+    - [ ] 文档说明推荐线程模型。
+
+- [ ] 22. 验证与测试
+  - [ ] 建立单元测试。
+    - [ ] 空间代数。
+    - [ ] 关节。
+    - [ ] 配置空间。
+    - [ ] 模型构建。
+    - [ ] 缓存一致性。
+    - [ ] 算法结果。
+  - [ ] 建立 compile-fail 测试。
+    - [ ] 坐标系错加。
+    - [ ] 坐标系错乘。
+    - [ ] 错误对偶变换。
+    - [ ] 错误 model/cache 配对。
+  - [ ] 建立 property tests。
+    - [ ] SE3 群性质。
+    - [ ] SO3 exp/log 往返。
+    - [ ] integrate/difference 往返。
+    - [ ] RNEA/ABA 互逆。
+    - [ ] CRBA 对称性。
+  - [ ] 建立 Pinocchio 黄金数据。
+    - [ ] 生成简单 pendulum 数据。
+    - [ ] 生成 two-link manipulator 数据。
+    - [ ] 生成 branching tree 数据。
+    - [ ] 生成 free-flyer 数据。
+    - [ ] 生成 spherical joint 数据。
+    - [ ] 生成 URDF fixture 数据。
+    - [ ] 在 Rust 测试中读取并比较。
+  - [ ] 建立 no_std 检查。
+    - [ ] 核心基础。
+    - [ ] 空间代数。
+    - [ ] 关节。
+    - [ ] 模型。
+    - [ ] 缓存。
+    - [ ] 算法。
+
+- [ ] 23. Benchmark
+  - [ ] 建立性能基准。
+    - [ ] FK。
+    - [ ] Jacobian。
+    - [ ] RNEA。
+    - [ ] CRBA。
+    - [ ] ABA。
+    - [ ] CoM。
+    - [ ] centroidal。
+  - [ ] 建立实时指标。
+    - [ ] 单次耗时。
+    - [ ] p50。
+    - [ ] p90。
+    - [ ] p99。
+    - [ ] 分配次数。
+    - [ ] cache reuse 成本。
+  - [ ] 建立与 Pinocchio 的性能对比。
+    - [ ] 同一模型。
+    - [ ] 同一输入。
+    - [ ] 同一标量精度。
+    - [ ] 明确编译选项。
+  - [ ] 建立规模测试。
+    - [ ] 1 DoF。
+    - [ ] 2 DoF。
+    - [ ] 7 DoF manipulator。
+    - [ ] humanoid floating-base。
+    - [ ] branching robot。
+
+- [ ] 24. 文档
+  - [ ] 编写架构文档。
+    - [ ] 解释为什么采用 Model/Data 分离。
+    - [ ] 解释为什么 parser/codegen/collision 不属于核心。
+    - [ ] 解释静态模型和动态模型的取舍。
+  - [ ] 编写坐标系安全文档。
+    - [ ] 解释参考坐标系。
+    - [ ] 解释表达坐标系。
+    - [ ] 解释 Transform 方向。
+    - [ ] 解释 Motion 与 Force 的对偶关系。
+    - [ ] 给出错误示例和修复方式。
+  - [ ] 编写实时文档。
+    - [ ] 哪些 API 可用于控制循环。
+    - [ ] 哪些 API 只用于初始化。
+    - [ ] 如何预分配缓存。
+    - [ ] 如何验证零分配。
+  - [ ] 编写算法文档。
+    - [ ] FK。
+    - [ ] Jacobian。
+    - [ ] RNEA。
+    - [ ] CRBA。
+    - [ ] ABA。
+    - [ ] CoM。
+    - [ ] centroidal。
+    - [ ] derivatives。
+  - [ ] 编写教程。
+    - [ ] 手写一个二连杆模型。
+    - [ ] 从 URDF 导入模型。
+    - [ ] 运行 RNEA。
+    - [ ] 运行 ABA。
+    - [ ] 查询末端 Jacobian。
+    - [ ] 生成静态机器人代码。
+
+- [ ] 25. 推荐实现顺序
+  - [ ] 第一阶段：写设计文档和 crate 边界。
+    - [ ] 先冻结核心概念名称。
+    - [ ] 先冻结 frame safety 语义。
+    - [ ] 先冻结实时 API 边界。
+  - [ ] 第二阶段：实现空间代数。
+    - [ ] SE3。
+    - [ ] Motion。
+    - [ ] Force。
+    - [ ] Inertia。
+    - [ ] compile-fail frame safety。
+  - [ ] 第三阶段：实现关节与配置空间。
+    - [ ] 基础关节。
+    - [ ] floating-base。
+    - [ ] quaternion 配置操作。
+    - [ ] joint calc。
+  - [ ] 第四阶段：实现模型和缓存。
+    - [ ] builder。
+    - [ ] topology query。
+    - [ ] static cache。
+    - [ ] dynamic cache。
+  - [ ] 第五阶段：实现基础算法。
+    - [ ] FK。
+    - [ ] Jacobian。
+    - [ ] RNEA。
+    - [ ] CRBA。
+    - [ ] ABA。
+  - [ ] 第六阶段：建立验证闭环。
+    - [ ] 解析解测试。
+    - [ ] Pinocchio 黄金数据。
+    - [ ] no allocation 测试。
+    - [ ] no_std 编译测试。
+  - [ ] 第七阶段：实现 parser 和 codegen。
+    - [ ] URDF。
+    - [ ] SRDF。
+    - [ ] 静态模型生成。
+    - [ ] 类型安全 frame 生成。
+  - [ ] 第八阶段：实现高级算法。
+    - [ ] CoM。
+    - [ ] centroidal。
+    - [ ] derivatives。
+    - [ ] constraints。
+  - [ ] 第九阶段：实现 geometry 和 collision。
+    - [ ] geometry model。
+    - [ ] geometry data。
+    - [ ] collision backend。
+    - [ ] SRDF collision filtering。
+
