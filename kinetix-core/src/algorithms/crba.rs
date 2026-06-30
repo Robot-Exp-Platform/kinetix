@@ -1,10 +1,10 @@
 use kinetix_spatial::KScalar;
 
 use crate::algorithms::spatial::{
-    add_inertia, inertia_mul_motion, joint_transform, transform_force_to_parent,
-    transform_inertia_to_parent,
+    add_inertia, joint_inertia_column, joint_project_force, joint_transform,
+    transform_force_to_parent, transform_inertia_to_parent,
 };
-use crate::data::{TypedData, motion_dot_force};
+use crate::data::TypedData;
 use crate::model::TypedModel;
 
 /// Composite Rigid Body Algorithm.
@@ -31,18 +31,16 @@ pub fn crba<T: KScalar, const DOF: usize>(
     }
 
     for i in 0..DOF {
-        let s_i = model.joint_types[i].motion_subspace();
-        let mut force = inertia_mul_motion(&data.i_a[i], &s_i);
+        let mut force = joint_inertia_column(model.joint_types[i], &data.i_a[i]);
 
-        data.m_matrix[(i, i)] = motion_dot_force(&s_i, &force);
+        data.m_matrix[(i, i)] = joint_project_force(model.joint_types[i], &force);
 
         let mut j = i;
         while j != 0 {
             force = transform_force_to_parent(&data.li_x_p[j], &force);
             j = model.parents[j];
 
-            let s_j = model.joint_types[j].motion_subspace();
-            let value = motion_dot_force(&s_j, &force);
+            let value = joint_project_force(model.joint_types[j], &force);
             data.m_matrix[(i, j)] = value;
             data.m_matrix[(j, i)] = value;
         }

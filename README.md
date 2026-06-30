@@ -73,28 +73,30 @@ above `1.0` mean Kinetix is faster.
 
 | Workload | Kinetix vs Pinocchio |
 | --- | --- |
-| Spatial algebra micro-ops | Kinetix was `1.47x` to `2.30x` faster |
-| RNEA on serial chains | Kinetix was `1.11x` to `1.23x` faster |
-| ABA on serial chains | Kinetix was `1.30x` to `1.62x` faster |
-| CRBA on serial chains | Pinocchio was faster; Kinetix ran at `0.54x` to `0.61x` |
+| Spatial algebra micro-ops | Mixed; most ops were `1.22x` to `3.16x` faster, while `cross_force` was slower |
+| RNEA on serial chains | Kinetix was `1.32x` to `1.61x` faster |
+| ABA on serial chains | Kinetix was `1.49x` to `1.77x` faster |
+| CRBA on serial chains | Kinetix was slightly slower at 2/6 DoF and `1.05x` to `1.28x` faster from 7 DoF upward |
 
 Selected raw rows:
 
 | Algorithm | DoF | Kinetix ns/iter | Pinocchio ns/iter | Speedup |
 | --- | ---: | ---: | ---: | ---: |
-| RNEA | 2 | `156.114` | `190.772` | `1.222x` |
-| RNEA | 12 | `1062.394` | `1174.760` | `1.106x` |
-| RNEA | 30 | `2544.262` | `3008.250` | `1.182x` |
-| ABA | 2 | `268.400` | `435.544` | `1.623x` |
-| ABA | 12 | `2222.222` | `3030.868` | `1.364x` |
-| ABA | 30 | `6025.446` | `7828.530` | `1.299x` |
-| CRBA | 2 | `165.264` | `97.306` | `0.589x` |
-| CRBA | 12 | `3056.106` | `1644.726` | `0.538x` |
-| CRBA | 30 | `15448.452` | `9464.182` | `0.613x` |
+| RNEA | 2 | `130.118` | `209.012` | `1.606x` |
+| RNEA | 12 | `757.888` | `1146.864` | `1.513x` |
+| RNEA | 30 | `2272.414` | `2997.556` | `1.319x` |
+| ABA | 2 | `242.688` | `428.274` | `1.765x` |
+| ABA | 12 | `1942.580` | `2890.482` | `1.488x` |
+| ABA | 30 | `4991.966` | `7855.912` | `1.574x` |
+| CRBA | 2 | `106.478` | `96.680` | `0.908x` |
+| CRBA | 12 | `1542.744` | `1644.564` | `1.066x` |
+| CRBA | 30 | `7316.708` | `9377.468` | `1.282x` |
 
 This is an implementation snapshot, not a general claim about all robots or all
-machines. It also shows the next obvious optimization target: CRBA still spends
-too much time in generic spatial inertia and force transforms.
+machines. It includes the first CRBA hot-path optimization pass: generic 6x6
+spatial inertia/force transforms were replaced by direct 3D block operations and
+Z-axis joint projection specializations. The next obvious optimization target is
+reducing remaining small-DoF constant overhead and temporary 3x3 matrix traffic.
 
 ## Workspace Layout
 

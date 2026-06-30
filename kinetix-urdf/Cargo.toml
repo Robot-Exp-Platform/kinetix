@@ -2,9 +2,15 @@
 name = "kinetix-urdf"
 version = "0.1.0"
 edition = "2024"
+authors = ["Yixing <yanjizhou312@163.com>"]
+description = "URDF loading and model conversion for Kinetix."
+readme = "../README.md"
+repository = "https://github.com/Robot-Exp-Platform/kinetix"
+license = "Apache-2.0"
+categories = ["science::robotics"]
 
 [dependencies]
-kinetix-core = { path = "../kinetix-core" }
-kinetix-spatial = { path = "../kinetix-spatial" }
+kinetix-core = { version = "0.1.0", path = "../kinetix-core" }
+kinetix-spatial = { version = "0.1.0", path = "../kinetix-spatial" }
 nalgebra = { version = "0.34", default-features = false, features = ["macros"] }
 urdf-rs = "0.9"

@@ -2,6 +2,12 @@
 name = "kinetix-spatial"
 version = "0.1.0"
 edition = "2024"
+authors = ["Yixing <yanjizhou312@163.com>"]
+description = "Typed no_std spatial algebra for Kinetix rigid-body dynamics."
+readme = "../README.md"
+repository = "https://github.com/Robot-Exp-Platform/kinetix"
+license = "Apache-2.0"
+categories = ["science::robotics"]
 
 [dependencies]
 nalgebra = { version = "0.34", default-features = false, features = ["macros"] }
