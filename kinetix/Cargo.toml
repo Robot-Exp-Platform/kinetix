@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+kinetix-autodiff = { path = "../kinetix-autodiff" }
+kinetix-core = { path = "../kinetix-core" }
+kinetix-spatial = { path = "../kinetix-spatial" }
+kinetix-urdf = { path = "../kinetix-urdf" }
